@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, ref, onMounted } from 'vue';
-import { NDropdown, type DropdownOption, NModal, NInput, NButton, useMessage, NImage, NForm, NFormItem, NSwitch, NTag, NSelect, NConfigProvider, lightTheme, darkTheme } from 'naive-ui';
+import { NDropdown, type DropdownOption, NModal, NInput, NInputNumber, NButton, useMessage, NImage, NForm, NFormItem, NSwitch, NTag, NSelect, NConfigProvider, lightTheme, darkTheme } from 'naive-ui';
 import settingSvgUrl from '@/assets/img/setting.svg?url';
 import { usePromptStore } from '@/stores/modules/prompt';
 import { storeToRefs } from 'pinia';
@@ -13,6 +13,7 @@ import { useUserStore } from '@/stores/modules/user';
 
 const isShowMore = ref(false);
 const isShowSettingModal = ref(false);
+const isShowAdvancedSettingModal = ref(false);
 const isShowSetAboutModal = ref(false);
 const userToken = ref('');
 const userKievRPSSecAuth = ref('');
@@ -28,7 +29,7 @@ const { isShowChatServiceSelectModal } = storeToRefs(chatStore);
 const userStore = useUserStore();
 const localVersion = __APP_INFO__.version;
 const lastVersion = ref('加载中...');
-const { historyEnable, themeMode, fullCookiesEnable, cookiesStr } = storeToRefs(userStore)
+const { historyEnable, themeMode, fullCookiesEnable, cookiesStr, enterpriseEnable, customChatNum, sydneyEnable, sydneyPrompt } = storeToRefs(userStore)
 let cookiesEnable = ref(false);
 let cookies = ref('');
 let history = ref(true);
@@ -37,6 +38,10 @@ let theme = ref(lightTheme);
 let settingIconStyle = ref({
   filter: 'invert(70%)',
 })
+const enterpriseSetting = ref(false);
+const customChatNumSetting = ref(0);
+const sydneySetting = ref(false);
+const sydneyPromptSetting = ref('');
 
 const GetLastVersion = async () => {
   const res = await fetch('https://api.github.com/repos/Harry-zklcdc/go-proxy-bingai/releases/latest');
@@ -51,6 +56,7 @@ const navType = {
   setting: 'setting',
   compose: 'compose',
   createImage: 'createImage',
+  advancedSetting: 'advancedSetting',
   reset: 'reset',
   about: 'about',
 };
@@ -75,6 +81,10 @@ const navConfigs = [
   {
     key: navType.createImage,
     label: '图像创建',
+  },
+  {
+    key: navType.advancedSetting,
+    label: '高级设置',
   },
   {
     key: navType.reset,
@@ -147,6 +157,17 @@ const handleSelect = (key: string) => {
         isShowSettingModal.value = true;
       }
       break;
+    case navType.advancedSetting:
+      {
+        history.value = historyEnable.value;
+        themeModeSetting.value = themeMode.value;
+        enterpriseSetting.value = enterpriseEnable.value;
+        customChatNumSetting.value = customChatNum.value;
+        sydneySetting.value = sydneyEnable.value;
+        sydneyPromptSetting.value = sydneyPrompt.value;
+        isShowAdvancedSettingModal.value = true;
+      }
+      break;
     case navType.createImage:
       {
         if (!userStore.sysConfig?.isSysCK && !userStore.getUserToken()) {
@@ -174,7 +195,7 @@ const resetCache = async () => {
   isShowClearCacheModal.value = false;
   await userStore.resetCache();
   message.success('清理完成');
-  window.location.reload();
+  window.location.href = '/web/';
 };
 
 const saveSetting = () => {
@@ -183,7 +204,7 @@ const saveSetting = () => {
     cookiesStr.value = cookies.value;
   } else {
     if (!userToken.value) {
-    message.warning('请先填入用户 _U Cookie');
+      message.warning('请先填入用户 _U Cookie');
     } else {
       userStore.saveUserToken(userToken.value);
     }
@@ -204,7 +225,17 @@ const saveSetting = () => {
     }
   }
   fullCookiesEnable.value = cookiesEnable.value;
+  isShowSettingModal.value = false;
+};
+
+const saveAdvancedSetting = () => {
   historyEnable.value = history.value;
+  const tmpEnterpris = enterpriseEnable.value;
+  enterpriseEnable.value = enterpriseSetting.value;
+  customChatNum.value = customChatNumSetting.value;
+  const tmpSydney = sydneyEnable.value;
+  sydneyEnable.value = sydneySetting.value;
+  sydneyPrompt.value = sydneyPromptSetting.value;
   if (history.value) {
     if (userStore.getUserToken()) {
       CIB.vm.sidePanel.isVisibleDesktop = true;
@@ -235,8 +266,11 @@ const saveSetting = () => {
       settingIconStyle.value = { filter: 'invert(0%)' }
     }
   }
-  isShowSettingModal.value = false;
-};
+  isShowAdvancedSettingModal.value = false;
+  if (tmpEnterpris != enterpriseSetting.value || tmpSydney != sydneySetting.value) {
+    window.location.href = '/web/';
+  }
+}
 </script>
 
 <template>
@@ -270,16 +304,40 @@ const saveSetting = () => {
         <NFormItem v-show="cookiesEnable" path="token" label="Cookies">
           <NInput size="large" v-model:value="cookies" type="text" placeholder="完整用户 Cookie" />
         </NFormItem>
-        <NFormItem path="history" label="历史记录">
-          <NSwitch v-model:value="history" />
-        </NFormItem>
-        <NFormItem path="themeMode" label="主题模式">
-          <NSelect v-model:value="themeModeSetting" :options="themeModeOptions" size="large" placeholder="请选择主题模式"/>
-        </NFormItem>
       </NForm>
       <template #action>
         <NButton size="large" @click="isShowSettingModal = false">取消</NButton>
         <NButton ghost size="large" type="info" @click="saveSetting">保存</NButton>
+      </template>
+    </NModal>
+    <NModal v-model:show="isShowAdvancedSettingModal" preset="dialog" :show-icon="false">
+      <template #header>
+        <div class="text-3xl py-2">高级设置</div>
+      </template>
+      <NForm ref="formRef" label-placement="left" label-width="auto" require-mark-placement="right-hanging"
+        style="margin-top: 16px;">
+        <NFormItem path="history" label="历史记录">
+          <NSwitch v-model:value="history" />
+        </NFormItem>
+        <NFormItem path="enterpriseEnable" label="企业版">
+          <NSwitch v-model:value="enterpriseSetting" />
+        </NFormItem>
+        <NFormItem path="sydneyEnable" label="越狱模式">
+          <NSwitch v-model:value="sydneySetting" />
+        </NFormItem>
+        <NFormItem path="sydneyPrompt" label="提示词">
+          <NInput size="large" v-model:value="sydneyPromptSetting" type="text" placeholder="越狱模式提示词" />
+        </NFormItem>
+        <NFormItem path="themeMode" label="主题模式">
+          <NSelect v-model:value="themeModeSetting" :options="themeModeOptions" size="large" placeholder="请选择主题模式" />
+        </NFormItem>
+        <NFormItem v-show="!cookiesEnable" path="customChatNum" label="聊天次数">
+          <NInputNumber size="large" v-model:value="customChatNumSetting" min="0" style="width: 100%;"/>
+        </NFormItem>
+      </NForm>
+      <template #action>
+        <NButton size="large" @click="isShowAdvancedSettingModal = false">取消</NButton>
+        <NButton ghost size="large" type="info" @click="saveAdvancedSetting">保存</NButton>
       </template>
     </NModal>
     <NModal v-model:show="isShowClearCacheModal" preset="dialog" :show-icon="false">
@@ -297,7 +355,7 @@ const saveSetting = () => {
       </template>
       <NForm ref="formRef" label-placement="left" label-width="auto" size="small" style="margin-top: 16px;">
         <NFormItem path="" label="版本号">
-          <NTag type="info" size="small" round>{{ 'v'+localVersion }}</NTag>
+          <NTag type="info" size="small" round>{{ 'v' + localVersion }}</NTag>
         </NFormItem>
         <NFormItem path="" label="最新版本">
           <NTag type="info" size="small" round>{{ lastVersion }}</NTag>
@@ -311,11 +369,10 @@ const saveSetting = () => {
         <NFormItem path="token" label="原开源地址">
           <NButton text tag="a" href="https://github.com/adams549659584/go-proxy-bingai" target="_blank" type="success">adams549659584/go-proxy-bingai</NButton>
         </NFormItem>
-      </NForm>
-      <template #action>
-        <NButton ghost size="large" @click="isShowSetAboutModal = false" type="info">确定</NButton>
-      </template>
-    </NModal>
-    <CreateImage v-model:show="isShowCreateImageModal" />
-  </NConfigProvider>
-</template>
+    </NForm>
+    <template #action>
+      <NButton ghost size="large" @click="isShowSetAboutModal = false" type="info">确定</NButton>
+    </template>
+  </NModal>
+  <CreateImage v-model:show="isShowCreateImageModal" />
+</NConfigProvider></template>
